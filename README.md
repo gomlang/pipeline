@@ -181,5 +181,5 @@ A dedicated test verifies upstream failure wakes blocked downstream callbacks.
 
 Native consumer tests compare all 1,253 retained cases against independent list,
 slice, accumulation, zip and multiset reference calculations, including malformed
-configurations and typed errors. [Fixture provenance](../consumers/pipeline/tests/data/README.md) records the model and seed. The native verifier rebuilds and runs
+configurations and typed errors. [Fixture provenance](../../goml-dev/ecosystem/consumers/pipeline/tests/data/README.md) records the model and seed. The native verifier rebuilds and runs
 both library and consumer tests under Go's race detector.
