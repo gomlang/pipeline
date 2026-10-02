@@ -78,6 +78,14 @@ must return normally and cannot report errors; use a resource with application
 error reporting when cleanup failures matter. User callbacks must observe the
 token to interrupt their own blocking work.
 
+`try_flat_map(mapper)` expands each input through a fallible callback receiving
+`(CancelToken, value)`. It visits each returned stream sequentially, preserves
+inner order, and stops acquiring inner streams after downstream early stop.
+Mapper failures carry stage `flat_map` and the zero-based outer input index;
+they immediately cancel sibling work through the shared run control. Inner
+stream failures retain their own stage/index. Each run resets the outer index.
+`flat_map` is the infallible convenience form.
+
 ## Bounded parallelism
 
 `parallel_map`, `parallel_filter` and `parallel_filter_map` accept

@@ -233,10 +233,18 @@ impl[T, E] Stream[T, E] {
     }
 
     pub fn flat_map[U](self: Stream[T, E], mapper: (T) -> Stream[U, E]) -> Stream[U, E] {
+        self.try_flat_map(|_, value| Result::Ok(mapper(value)))
+    }
+
+    pub fn try_flat_map[U](
+        self: Stream[T, E],
+        mapper: (task::CancelToken, T) -> Result[Stream[U, E], E],
+    ) -> Stream[U, E] {
         Stream {
             produce: |cancel, control, emit| {
                 let failure: Ref[Option[Error[E]]] = Ref::new(Option::None);
                 let stopped = Ref::new(false);
+                let index = Ref::new(0);
                 let result = (self.produce)(
                     cancel,
                     control,
@@ -244,7 +252,23 @@ impl[T, E] Stream[T, E] {
                         if cancel.is_cancelled() {
                             return false
                         }
-                        let inner = mapper(value);
+                        let current = index.get();
+                        if current == 9223372036854775807 {
+                            let problem = Error::new(ErrorKind::Limit, "flat-map index overflow");
+                            control.record(problem);
+                            failure.set(Option::Some(problem));
+                            return false
+                        }
+                        index.set(current + 1);
+                        let inner = match mapper(cancel, value) {
+                            Ok(inner) => inner,
+                            Err(cause) => {
+                                let problem = Error::stage(cause, "flat_map", Option::Some(current));
+                                control.record(problem);
+                                failure.set(Option::Some(problem));
+                                return false
+                            },
+                        };
                         let result = (inner.produce)(
                             cancel,
                             control,
