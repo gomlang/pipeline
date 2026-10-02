@@ -66,6 +66,18 @@ items or capture in callbacks. A stream with immutable sources and safe callback
 can be run repeatedly; application-owned callback state controls whether results
 are repeatable.
 
+`generate_resource(acquire, next, release)` owns a source resource for each run.
+`acquire(token)` returns a resource, `next(token, resource)` yields an optional
+item, and `release(resource)` runs exactly once after successful acquisition.
+Cleanup covers exhaustion, `take`/terminal early stop, source or sink failure,
+and cooperative cancellation, including cancellation inside acquisition. A
+pre-cancelled run does not acquire; failed acquisition does not release. Each
+run acquires independently, so the stream remains reusable. Acquisition errors
+use stage `source/acquire`; item errors retain the source item index. Cleanup
+must return normally and cannot report errors; use a resource with application
+error reporting when cleanup failures matter. User callbacks must observe the
+token to interrupt their own blocking work.
+
 ## Bounded parallelism
 
 `parallel_map`, `parallel_filter` and `parallel_filter_map` accept

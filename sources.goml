@@ -136,3 +136,23 @@ pub fn repeat[T, E](value: T) -> Stream[T, E] {
         },
     }
 }
+
+pub fn generate_resource[R, T, E](
+    acquire: (task::CancelToken) -> Result[R, E],
+    next: (task::CancelToken, R) -> Result[Option[T], E],
+    release: (R) -> (),
+) -> Stream[T, E] {
+    Stream {
+        produce: |cancel, control, emit| {
+            if cancel.is_cancelled() {
+                return Result::Err(Error::cancelled())
+            }
+            let resource = acquire(cancel).map_err(
+                |cause| Error::stage(cause, "source/acquire", Option::None),
+            )?;
+            defer release(resource);
+            let source = generate(|| |token| next(token, resource));
+            (source.produce)(cancel, control, emit)
+        },
+    }
+}
