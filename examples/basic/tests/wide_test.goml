@@ -1,0 +1,19 @@
+package tests;
+
+use ecosystem::pipeline;
+use std::testing;
+
+#[test]
+fn resource_generator_cleans_up_after_downstream_stop() -> () {
+    let released = Ref::new(false);
+    let stream: pipeline::Stream[isize, string] = pipeline::generate_resource(
+        |_| Result::Ok(7),
+        |_, value| Result::Ok(Option::Some(value)),
+        |_| released.set(true),
+    );
+    testing::assert(
+        testing::expect_ok(stream.first(pipeline::RunOptions::standard()), "first")
+            == Option::Some(7),
+    );
+    testing::assert(released.get());
+}
