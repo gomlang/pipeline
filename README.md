@@ -22,10 +22,10 @@ fn example() -> Result[Vec[isize], pipeline::Error[string]] {
 }
 ```
 
-The element type and application error type are independent. The consumer module
+The element type and application error type are independent. The example
 uses its own `Job`, `Output` and `Issue` records, including an error type without
-`Debug` or `ToString` implementations. Captured callbacks specialize across the
-versioned module boundary. Pipelines do not start tasks or consume sources until
+`Debug` or `ToString` implementations. Independent downstream verification also checks captured callback specialization
+across the module boundary. Pipelines do not start tasks or consume sources until
 a terminal operation runs them.
 
 ## Sources and transformations
@@ -166,8 +166,8 @@ From the repository root:
 (cd ../verification && just ecosystem-test pipeline)
 ```
 
-The verifier checks formatting, the library test suite, a separately resolved
-versioned consumer, fresh/cached builds, executable behavior, native sequence reference tests and Go's race detector.
+The verifier checks formatting, the library test suite, example tests and independent
+downstream verification, fresh/cached builds, executable behavior, native sequence reference tests and Go's race detector.
 No Python interpreter, external service or package is required.
 
 Library tests cover lazy/repeated execution, generator factories, shallow input
@@ -179,7 +179,19 @@ hold specific tasks at known points instead of relying on sleeps to infer
 concurrency. Scope counts verify cleanup after success, stop, failure and cancel.
 A dedicated test verifies upstream failure wakes blocked downstream callbacks.
 
-Native consumer tests compare all 1,253 retained cases against independent list,
+Native example tests compare all 1,253 retained cases against independent list,
 slice, accumulation, zip and multiset reference calculations, including malformed
-configurations and typed errors. [Fixture provenance](consumer/tests/data/README.md) records the model and seed. The native verifier rebuilds and runs
-both library and consumer tests under Go's race detector.
+configurations and typed errors. [Fixture provenance](examples/basic/tests/data/README.md) records the model and seed. The native verifier rebuilds and runs
+both library and example tests under Go's race detector.
+
+## Development and examples
+
+Requires GoML 0.1.55 or newer. The `examples/basic/` example shares the root manifest; test-only helpers are declared in `[dev-dependencies]`. From the library root, run:
+
+```sh
+goml run --example basic
+goml test
+goml verify --timeout 300s
+```
+
+`goml test` builds the example and runs its tests. `goml verify` repeats the example checks as an independent module against an isolated registry snapshot. `(cd ../verification && just ecosystem-test pipeline)` also retains the library-specific smoke and compatibility checks.

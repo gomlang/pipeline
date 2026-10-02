@@ -1,6 +1,6 @@
 package tests;
 
-use consumer::pipeline;
+use ecosystem::pipeline::examples::basic as pipeline;
 use std::testing;
 
 #[test]
