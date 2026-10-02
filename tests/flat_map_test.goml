@@ -1,0 +1,74 @@
+package tests;
+
+use ecosystem::pipeline;
+use std::task;
+use std::testing;
+use std::time;
+
+#[test]
+fn fallible_expansion_is_ordered_reusable_and_stops_acquiring_after_take() -> () {
+    let calls = Ref::new(0);
+    let stream = numbers(4).try_flat_map(
+        |_, value| {
+            calls.set(calls.get() + 1);
+            Result::Ok(values(Vec::from_array([value, value * 10])))
+        },
+    );
+    testing::assert(collect(stream) == Vec::from_array([0, 0, 1, 10, 2, 20, 3, 30]));
+    testing::assert(
+        collect(testing::expect_ok(stream.take(3), "take")) == Vec::from_array([0, 0, 1]),
+    );
+    testing::assert_eq(calls.get(), 6);
+    let failing = numbers(4).try_flat_map(
+        |_, value| {
+            if value == 2 {
+                Result::Err("bad expansion")
+            } else {
+                Result::Ok(values(Vec::new()))
+            }
+        },
+    ).named("outer");
+    for _ in 0..2 {
+        let error = testing::expect_err(
+            failing.collect(pipeline::RunOptions::standard()),
+            "mapper error",
+        );
+        testing::assert_eq(error.stage, "outer/flat_map");
+        testing::assert(error.index == Option::Some(2));
+        testing::assert(error.cause == Option::Some("bad expansion"));
+    }
+}
+
+#[test]
+fn expansion_failure_cancels_sibling_producers_and_releases_resources() -> () {
+    let ready: Channel[()] = Channel::new(0);
+    let released: Channel[()] = Channel::new(1);
+    let waiting: pipeline::Stream[isize, string] = pipeline::generate_resource(
+        |_| {
+            ready.close();
+            Result::Ok(())
+        },
+        |cancel, _| {
+            let _ = cancel.done().recv();
+            Result::Ok(Option::None)
+        },
+        |_| released.send(()),
+    );
+    let failure = numbers(1).try_flat_map(
+        |_, _| {
+            let _ = ready.recv();
+            Result::Err("expand")
+        },
+    );
+    let streams: Vec[pipeline::Stream[isize, string]] = Vec::from_array([waiting, failure]);
+    let stream = testing::expect_ok(pipeline::merge(streams, 0), "merge");
+    let error = testing::expect_err(
+        stream.collect(
+            pipeline::RunOptions::standard().with_timeout(time::Duration::from_seconds(3)),
+        ),
+        "failure",
+    );
+    testing::assert_eq(error.kind, pipeline::ErrorKind::Stage);
+    testing::assert_eq(error.stage, "flat_map");
+    testing::assert_some(released.recv());
+}

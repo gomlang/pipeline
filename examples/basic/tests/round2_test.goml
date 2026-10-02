@@ -1,0 +1,21 @@
+package tests;
+
+use ecosystem::pipeline;
+use std::testing;
+
+#[test]
+fn fallible_flat_map_preserves_outer_error_index_downstream() -> () {
+    let source: pipeline::Stream[isize, string] = pipeline::from_values(Vec::from_array([1, 2]));
+    let result: pipeline::Stream[string, string] = source.try_flat_map(
+        |_, value| {
+            if value == 2 {
+                Result::Err("invalid")
+            } else {
+                Result::Ok(pipeline::from_values(Vec::from_array(["one"])))
+            }
+        },
+    );
+    let error = testing::expect_err(result.collect(pipeline::RunOptions::standard()), "expansion");
+    testing::assert(error.index == Option::Some(1));
+    testing::assert_eq(error.stage, "flat_map");
+}
