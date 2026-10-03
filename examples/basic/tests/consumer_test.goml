@@ -2,8 +2,42 @@ package tests;
 
 use ecosystem::pipeline::examples::basic as pipeline;
 use std::testing;
+use ecosystem::pipeline as streams;
 
 #[test]
 fn downstream_records_typed_errors_reuse_and_channel_source() -> () {
     testing::assert_ok(pipeline::exercise());
+}
+
+struct Summary {
+    total: isize,
+    count: isize,
+}
+
+#[test]
+fn downstream_conditional_fold_specializes_a_consumer_accumulator() -> () {
+    let source: streams::Stream[isize, string] = streams::repeat(3);
+    let target = 9;
+    let summary = testing::expect_ok(
+        source.fold_while(
+            Summary { total: 0, count: 0 },
+            streams::RunOptions::standard(),
+            |_, state, value| {
+                let next = Summary { total: state.total + value, count: state.count + 1 };
+                Result::Ok(
+                    (
+                        next,
+                        if next.total >= target {
+                            streams::Control::Stop
+                        } else {
+                            streams::Control::Continue
+                        },
+                    ),
+                )
+            },
+        ),
+        "downstream accumulator",
+    );
+    testing::assert_eq(summary.total, 9);
+    testing::assert_eq(summary.count, 3);
 }

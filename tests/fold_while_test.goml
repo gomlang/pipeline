@@ -1,0 +1,151 @@
+package tests;
+
+use ecosystem::pipeline;
+use std::task;
+use std::testing;
+
+#[test]
+fn folding_can_stop_with_the_updated_accumulator_and_reuse_the_stream() -> () {
+    let reads = Ref::new(0);
+    let releases = Ref::new(0);
+    let stream: pipeline::Stream[isize, string] = pipeline::generate_resource(
+        |_| Result::Ok(Ref::new(0)),
+        |_, position| {
+            position.set(position.get() + 1);
+            reads.set(reads.get() + 1);
+            Result::Ok(Option::Some(position.get()))
+        },
+        |_| releases.set(releases.get() + 1),
+    );
+    for run in 1..3 {
+        let sum = testing::expect_ok(
+            stream.fold_while(
+                10,
+                pipeline::RunOptions::standard(),
+                |_, sum, value| {
+                    let next = sum + value;
+                    Result::Ok(
+                        (
+                            next,
+                            if next >= 16 {
+                                pipeline::Control::Stop
+                            } else {
+                                pipeline::Control::Continue
+                            },
+                        ),
+                    )
+                },
+            ),
+            "fold",
+        );
+        testing::assert_eq(sum, 16);
+        testing::assert_eq(reads.get(), run * 3);
+        testing::assert_eq(releases.get(), run);
+    }
+    let empty: pipeline::Stream[isize, string] = pipeline::from_values(Vec::new());
+    testing::assert_eq(
+        testing::expect_ok(
+            empty.fold_while(
+                42,
+                pipeline::RunOptions::standard(),
+                |_, _, _| Result::Err("unexpected"),
+            ),
+            "empty seed",
+        ),
+        42,
+    );
+}
+
+#[test]
+fn conditional_fold_preserves_typed_errors_limits_and_cancellation() -> () {
+    let source: pipeline::Stream[isize, string] = pipeline::from_values(Vec::from_array([1, 2, 3]));
+    let error = testing::expect_err(
+        source.fold_while(
+            0,
+            pipeline::RunOptions::standard(),
+            |_, sum, value| {
+                if value == 2 {
+                    Result::Err("bad item")
+                } else {
+                    Result::Ok((sum + value, pipeline::Control::Continue))
+                }
+            },
+        ),
+        "sink error",
+    );
+    testing::assert_eq(error.kind, pipeline::ErrorKind::Stage);
+    testing::assert_eq(error.stage, "sink");
+    testing::assert(error.index == Option::Some(1));
+    testing::assert(error.cause == Option::Some("bad item"));
+    let options = pipeline::RunOptions {
+        max_items: Option::Some(1),
+        ..pipeline::RunOptions::standard(),
+    };
+    testing::assert_eq(
+        testing::expect_ok(
+            source.fold_while(
+                0,
+                options,
+                |_, sum, value| Result::Ok((sum + value, pipeline::Control::Stop)),
+            ),
+            "stop at limit",
+        ),
+        1,
+    );
+    testing::assert_eq(
+        testing::expect_err(
+            source.fold_while(
+                0,
+                options,
+                |_, sum, value| Result::Ok((sum + value, pipeline::Control::Continue)),
+            ),
+            "item limit",
+        ).kind,
+        pipeline::ErrorKind::Limit,
+    );
+    task::scope(
+        |scope| {
+            scope.cancel();
+            testing::assert_eq(
+                testing::expect_err(
+                    source.fold_while(
+                        0,
+                        pipeline::RunOptions::standard().with_cancel(scope.token()),
+                        |_, _, _| Result::Err("unexpected"),
+                    ),
+                    "cancelled",
+                ).kind,
+                pipeline::ErrorKind::Cancelled,
+            );
+        },
+    );
+}
+
+#[test]
+fn conditional_fold_stops_buffered_workers_before_returning() -> () {
+    let releases: Channel[bool] = Channel::new(1);
+    let source: pipeline::Stream[isize, string] = pipeline::generate_resource(
+        |_| Result::Ok(()),
+        |_, _| Result::Ok(Option::Some(1)),
+        |_| releases.send(true),
+    );
+    let buffered = testing::expect_ok(source.buffer(1), "buffer");
+    testing::assert_eq(
+        testing::expect_ok(
+            buffered.fold_while(
+                0,
+                pipeline::RunOptions::standard(),
+                |_, count, value| Result::Ok((count + value, pipeline::Control::Stop)),
+            ),
+            "stop buffered",
+        ),
+        1,
+    );
+    testing::assert(
+        select {
+            recv(releases) as value => value,
+            default => Option::None,
+        }
+            == Option::Some(true),
+    );
+}

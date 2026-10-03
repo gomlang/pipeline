@@ -135,6 +135,21 @@ in the emitted count and requests a graceful early finish. `fold` applies a
 fallible accumulator. `count`, `first`, `find`, `any` and `all` provide common
 terminal operations; searches stop when their result is known.
 
+### Conditional accumulation
+
+`fold_while(initial, options, body)` accumulates values and permits a successful
+early stop. The callback receives `(CancelToken, accumulator, item)` and returns
+`Result[(accumulator, Control), E]`. `Continue` requests another item; `Stop`
+retains the returned accumulator and stops the upstream stream. Empty input
+returns the initial value. Each call has its own accumulator state, with ordinary
+shallow value semantics for reference-containing values.
+
+Like `fold` and `for_each`, it preserves typed callback errors with the sink item
+index, honors cancellation, deadlines and terminal item limits, and joins owned
+workers and releases source resources before returning. Buffered or parallel
+stages may already have consumed additional input before a stop reaches them.
+Use `for_each` directly when the terminal report is needed.
+
 `RunOptions::standard()` sets a terminal limit of 1,000,000 items, with no deadline
 or external cancellation token. `without_limit`, `with_timeout` and `with_cancel`
 configure a run. The public `max_items` field can set an explicit nonnegative

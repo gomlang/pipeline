@@ -151,6 +151,24 @@ impl[T, E] Stream[T, E] {
         Result::Ok(self.for_each(options, |_, _| Result::Ok(Control::Continue))?.emitted)
     }
 
+    pub fn fold_while[A](
+        self: Stream[T, E],
+        initial: A,
+        options: RunOptions,
+        body: (task::CancelToken, A, T) -> Result[(A, Control), E],
+    ) -> Result[A, Error[E]] {
+        let state = Ref::new(initial);
+        self.for_each(
+            options,
+            |cancel, value| {
+                let (next, control) = body(cancel, state.get(), value)?;
+                state.set(next);
+                Result::Ok(control)
+            },
+        )?;
+        Result::Ok(state.get())
+    }
+
     pub fn find(self: Stream[T, E], options: RunOptions, predicate: (T) -> bool) -> Result[
         Option[T],
         Error[E],
