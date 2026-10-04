@@ -300,6 +300,9 @@ impl[T, E] Stream[T, E] {
     ) -> Stream[U, E] {
         Stream {
             produce: |cancel, control, emit| {
+                if cancel.is_cancelled() {
+                    return Result::Err(Error::cancelled())
+                }
                 let state = Ref::new(seed());
                 let scanned = self.try_filter_map(
                     |token, value| {

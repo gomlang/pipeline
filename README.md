@@ -66,6 +66,10 @@ items or capture in callbacks. A stream with immutable sources and safe callback
 can be run repeatedly; application-owned callback state controls whether results
 are repeatable.
 
+`scan` checks cancellation before calling its state factory, including when an
+earlier `concat` source or `flat_map` mapper cancels the run. A skipped factory
+does not affect a later fresh run of the same stream.
+
 `generate_resource(acquire, next, release)` owns a source resource for each run.
 `acquire(token)` returns a resource, `next(token, resource)` yields an optional
 item, and `release(resource)` runs exactly once after successful acquisition.

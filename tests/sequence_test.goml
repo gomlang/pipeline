@@ -249,3 +249,45 @@ fn precancel_and_zero_timeout_do_not_enter_sources() -> () {
     testing::assert_eq(problem.kind, ErrorKind::Timeout);
     testing::assert(!entered.get());
 }
+
+#[test]
+fn cancelled_compositions_do_not_initialize_later_scan_state() -> () {
+    for mode in 0..2 {
+        let initialized = Ref::new(0);
+        let scanned = numbers(2).scan(
+            || {
+                initialized.set(initialized.get() + 1);
+                0
+            },
+            |_, total, value| Result::Ok((total + value, Option::Some(total + value))),
+        );
+        task::scope(
+            |scope| {
+                let stream = if mode == 0 {
+                    let before: Stream[isize, string] = pipeline::from_producer(
+                        |_, _| {
+                            scope.cancel();
+                            Result::Ok(())
+                        },
+                    );
+                    before.concat(scanned)
+                } else {
+                    numbers(1).try_flat_map(
+                        |_, _| {
+                            scope.cancel();
+                            Result::Ok(scanned)
+                        },
+                    )
+                };
+                let error = testing::expect_err(
+                    stream.collect(RunOptions::standard().with_cancel(scope.token())),
+                    "cancelled composition",
+                );
+                testing::assert_eq(error.kind, ErrorKind::Cancelled);
+                testing::assert_eq(initialized.get(), 0);
+            },
+        );
+        testing::assert(collect(scanned) == Vec::from_array([0, 1]));
+        testing::assert_eq(initialized.get(), 1);
+    }
+}
