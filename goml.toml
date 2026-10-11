@@ -2,4 +2,4 @@
 path = "ecosystem::pipeline"
 
 [dev-dependencies]
-"ecosystem::verification" = true
+"ecosystem::testkit" = true
