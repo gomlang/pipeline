@@ -316,6 +316,28 @@ impl[T, E] Stream[T, E] {
         }
     }
 
+    pub fn dedup_by(self: Stream[T, E], equal: (T, T) -> bool) -> Stream[T, E] {
+        self.scan(
+            || Option::None,
+            |_, previous, value| {
+                let duplicate = match previous {
+                    Some(previous) => equal(previous, value),
+                    None => false,
+                };
+                Result::Ok(
+                    (
+                        Option::Some(value),
+                        if duplicate {
+                            Option::None
+                        } else {
+                            Option::Some(value)
+                        },
+                    ),
+                )
+            },
+        )
+    }
+
     pub fn chunks(self: Stream[T, E], size: isize) -> Result[Stream[Vec[T], E], Error[E]] {
         if size < 1 || size > 1048576 {
             return Result::Err(

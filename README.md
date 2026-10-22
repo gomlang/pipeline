@@ -233,3 +233,11 @@ goml test
 ```
 
 `goml test` builds the example and runs its tests. `(cd ../workflows && just ecosystem-test pipeline)` also retains the library-specific smoke and compatibility checks.
+
+`Stream.dedup_by(equal)` keeps the first item and each item unequal to its
+immediate predecessor in the input. `equal(previous, current)` runs once per
+item after the first, including after suppressed items; it should be pure.
+State is allocated separately for every run and retains only one value.
+Early stop and cancellation inherit `scan`'s consumption behavior. Values are
+retained by ordinary GoML value/reference semantics, not deep-copied: snapshot
+mutable values upstream if later mutation must not affect comparison.

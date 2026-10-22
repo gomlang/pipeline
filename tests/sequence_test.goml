@@ -291,3 +291,37 @@ fn cancelled_compositions_do_not_initialize_later_scan_state() -> () {
         testing::assert_eq(initialized.get(), 1);
     }
 }
+
+#[test]
+fn adjacent_dedup_is_reusable_and_matches_linear_reference() -> () {
+    for size in 0..80 {
+        let input = Vec::new();
+        let expected = Vec::new();
+        let mut previous = Option::None;
+        for i in 0..size {
+            let value = (i / 3) % 5;
+            input.push(value);
+            if previous != Option::Some(value) {
+                expected.push(value);
+            }
+            previous = Option::Some(value);
+        }
+        let stream = values(input).dedup_by(|a, b| a == b);
+        testing::assert(collect(stream) == expected);
+        testing::assert(collect(stream) == expected);
+    }
+    let input = Vec::from_array([1, 2, 3, 6, 7]);
+    testing::assert(collect(values(input).dedup_by(|a, b| b - a <= 1)) == Vec::from_array([1, 6]));
+    let calls = Ref::new(0);
+    let stream = numbers(100).map(
+        |v| {
+            calls.set(calls.get() + 1);
+            v / 3
+        },
+    ).dedup_by(|a, b| a == b);
+    testing::assert(collect(testing::expect_ok(stream.take(2), "take")) == Vec::from_array([0, 1]));
+    testing::assert_eq(calls.get(), 4);
+    testing::assert(
+        collect(values(Vec::from_array([9, 9, 9])).dedup_by(|a, b| a == b)) == Vec::from_array([9]),
+    );
+}
